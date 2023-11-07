@@ -243,6 +243,7 @@ def file_lstm():
         predict = lstm_model.predict(feature_pad_sequences)
         polarity = np.argmax(predict[0])
         sentiment_result = sentiment[polarity]
+        result.append(sentiment_result)
 
         original_text_upload = df.data_bersih.to_list()
 
@@ -251,7 +252,7 @@ def file_lstm():
             'description' : 'Hasil Prediksi LSTM Sentimen',
             'data' : {
                 'tulisan' : original_text_upload,
-                'sentimen' : sentiment_result
+                'sentimen' : result
             }
         }
         response_data = jsonify(json_response)
