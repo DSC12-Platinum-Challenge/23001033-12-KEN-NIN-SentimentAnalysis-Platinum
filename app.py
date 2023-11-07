@@ -130,7 +130,7 @@ def cleansing_model(text):
     return text
 
 #Load LSTM_File
-lstm = open ("LSTM_Files/x_pad_sequences")
+lstm = open ("LSTM_Files/x_pad_sequences.pickle",'rb')
 lstm_file = pickle.load(lstm)
 lstm.close()
 
