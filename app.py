@@ -1,11 +1,16 @@
 import re
 import pandas as pd
 import sqlite3 as sql
+import numpy as np
 from flask import Flask, jsonify
 from flask import request
 from flask import Response
 from flasgger import Swagger, LazyString, LazyJSONEncoder
 from flasgger import swag_from
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from keras.models import load_model
+
 
 
 app =  Flask (__name__)
@@ -33,13 +38,17 @@ swagger_config = {
     'specs_route' : '/docs/' 
 
 }
+swagger = Swagger(app, config= swagger_config, template=swagger_template)
+
+max_features = 100000
+tokenizer = Tokenizer(num_words=max_features, split=' ',lower=True)
+sentiment = ['negative', 'neutral', 'positive']
 
 @app.route('/')
 def welcoming ():
     return 'Welcom to the API for cleansing and detecting sentiment text'
 
-swagger = Swagger(app, config= swagger_config, template=swagger_template)
-
+#Endpoint text sensoring
 @swag_from('docs/text_implementing_processing.yml', methods=['POST'])
 @app.route('/text_implementing_processing', methods=['POST'])
 def text_implementing ():
@@ -55,10 +64,11 @@ def text_implementing ():
 
     return result_response
 
+#Endpoint file sensoring
 @swag_from ('docs/file_uploading_sensoring.yml', methods=['POST'])
 @app.route ('/file_uploading_sensoring', methods=['POST'])
 def uploading_file():
-    global connection_data  #
+    global connection_data  
 
     files = request.files['file']
     if not files:
@@ -97,7 +107,39 @@ def uploading_file():
 
     return response
 
-connection_data = sql.connect("abusive_text.db", check_same_thread=False)
+connection_model = sql.connect("database.db", check_same_thread=False)
+connection_data = sql.connect("database_sensoring.db", check_same_thread=False)
+
+#Function Cleansing of Model 
+def preprocess_text_model(text):
+    # Mengubah teks menjadi huruf kecil
+    text = text.lower()
+    # Menghapus URL dan tautan
+    text = re.sub(r'((www\.[^\s]+)|(https?://[^\s]+)|(http?://[^\s]+))', ' ', text)
+    text = re.sub(r'pic.twitter.com.[\w]+', ' ', text)
+    # Menghapus karakter yang tidak diinginkan, termasuk angka
+    text = re.sub(r'[^a-z\s]', ' ', text)
+    # Menghapus kata 'user'
+    text = text.replace('user', '')
+    # Menghapus spasi berlebih
+    text = re.sub(' +', ' ', text)
+    # Menghapus karakter \n (newline)
+    text = text.replace('\n', ' ')
+    # menghapus kata 'url' 
+    text = re.sub('url',' ', text)
+    return text
+
+def normalize_text_model(text):
+    data_alay = pd.read_sql_query('select * from kamusalay', connection_data)
+    dict_alay = dict(zip(data_alay['alay'], data_alay['normal'])) #Membungkus data teks_alay dan teks baku menjadi dictionary
+    text_list = text.split()
+    
+    text_normal_list = [dict_alay.get(word, word) for word in text_list] #Mengambil nilai baku pada data teks_baku
+    
+    text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
+    return text_normal.strip()
+
+#==========================
 
 #Function of Sensoring and Cleansing data without Modelling
 def sensoring_text(str):
@@ -143,3 +185,14 @@ def cleansing_sensoring (text):
     text = normalization_abusive(text)
     
     return text
+
+def cleansing_model(text):
+    text = preprocess_text_model(text)
+    text = normalize_text_model(text)
+
+    return text
+
+
+
+if __name__ == '__main__':
+    app.run()
