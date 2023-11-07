@@ -1,4 +1,4 @@
-import re
+import re, pickle
 import pandas as pd
 import sqlite3 as sql
 import numpy as np
@@ -40,9 +40,104 @@ swagger_config = {
 }
 swagger = Swagger(app, config= swagger_config, template=swagger_template)
 
+connection_model = sql.connect("database.db", check_same_thread=False)
+connection_data = sql.connect("database_sensoring.db", check_same_thread=False)
+
 max_features = 100000
 tokenizer = Tokenizer(num_words=max_features, split=' ',lower=True)
 sentiment = ['negative', 'neutral', 'positive']
+
+#Function Cleansing of Model 
+def preprocess_text_model(text):
+    # Mengubah teks menjadi huruf kecil
+    text = text.lower()
+    # Menghapus URL dan tautan
+    text = re.sub(r'((www\.[^\s]+)|(https?://[^\s]+)|(http?://[^\s]+))', ' ', text)
+    text = re.sub(r'pic.twitter.com.[\w]+', ' ', text)
+    # Menghapus karakter yang tidak diinginkan, termasuk angka
+    text = re.sub(r'[^a-z\s]', ' ', text)
+    # Menghapus kata 'user'
+    text = text.replace('user', '')
+    # Menghapus spasi berlebih
+    text = re.sub(' +', ' ', text)
+    # Menghapus karakter \n (newline)
+    text = text.replace('\n', ' ')
+    # menghapus kata 'url' 
+    text = re.sub('url',' ', text)
+    return text
+
+def normalize_text_model(text):
+    data_alay = pd.read_sql_query('select * from kamusalay', connection_model)
+    dict_alay = dict(zip(data_alay['alay'], data_alay['normal'])) #Membungkus data teks_alay dan teks baku menjadi dictionary
+    text_list = text.split()
+    
+    text_normal_list = [dict_alay.get(word, word) for word in text_list] #Mengambil nilai baku pada data teks_baku
+    
+    text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
+    return text_normal.strip()
+
+#==========================
+
+#Function of Sensoring and Cleansing data without Modelling
+def sensoring_text(str):
+    df_abusive = pd.read_sql_query("select * from ABUSIVE", connection_data)
+    dict_abusive = dict(zip(df_abusive['teks'], df_abusive['teks']))
+    for x in dict_abusive:
+        str = str.replace(x, '*' * len(x))  
+    return str
+def preprocessing_text(text):
+    text = text.lower()
+    text = re.sub(r'[^a-z]', ' ', text)
+    text = text.replace('user', '')
+    words = [word for word in text.split() if len(word) > 2]
+    return ' '.join(words)
+
+def normalize_text(text):
+    data_alay = pd.read_sql_query('select * from ALAY', connection_data)
+    dict_alay = dict(zip(data_alay['teks_alay'], data_alay['teks_baku'])) #Membungkus data teks_alay dan teks baku menjadi dictionary
+    text_list = text.split()
+    
+    text_normal_list = [dict_alay.get(word, word) for word in text_list] #Mengambil nilai baku pada data teks_baku
+    
+    text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
+    return text_normal.strip()
+
+def normalization_abusive(teks):
+    df_abusive = pd.read_sql_query("select * from ABUSIVE", connection_data)
+    dict_abusive = dict(zip(df_abusive['teks'],df_abusive['teks']))
+    teks = teks.split()
+    teks_normal = ''
+    for str in teks:
+        if(bool(str in dict_abusive)):
+            str = sensoring_text(str)
+            teks_normal = teks_normal + ' ' + str
+        else:
+            teks_normal = teks_normal + ' ' + str  
+    teks_normal = teks_normal.strip()
+    return teks_normal
+
+def cleansing_sensoring (text):
+    text = preprocessing_text(text)
+    text = normalize_text (text)
+    text = normalization_abusive(text)
+    
+    return text
+
+def cleansing_model(text):
+    text = preprocess_text_model(text)
+    text = normalize_text_model(text)
+
+    return text
+
+#Load LSTM_File
+lstm = open ("LSTM_Files/x_pad_sequences")
+lstm_file = pickle.load(lstm)
+lstm.close()
+
+#Model file
+lstm_model = load_model('LSTM_Files/main_model.h5')
+
+
 
 @app.route('/')
 def welcoming ():
@@ -107,90 +202,60 @@ def uploading_file():
 
     return response
 
-connection_model = sql.connect("database.db", check_same_thread=False)
-connection_data = sql.connect("database_sensoring.db", check_same_thread=False)
+#LSTM Teks Endpoint
+@swag_from('docs/LSTM_text.yml',methods=['POST'])
+@app.route('/LSTM_text',methods=['POST'])
+def text_lstm ():
+    text_input = request.form.get('Masukkan teks!')
+    text = [cleansing_sensoring(text_input)]
+    feature = tokenizer.text_to_sequences(text)
+    feature_pad_sequences = pad_sequences(feature, maxlen=lstm_file.shape[1])
+    predict = lstm_model.predict(feature_pad_sequences)
+    polarity = np.argmax(predict[0])
+    sentiment_result = sentiment[polarity]
 
-#Function Cleansing of Model 
-def preprocess_text_model(text):
-    # Mengubah teks menjadi huruf kecil
-    text = text.lower()
-    # Menghapus URL dan tautan
-    text = re.sub(r'((www\.[^\s]+)|(https?://[^\s]+)|(http?://[^\s]+))', ' ', text)
-    text = re.sub(r'pic.twitter.com.[\w]+', ' ', text)
-    # Menghapus karakter yang tidak diinginkan, termasuk angka
-    text = re.sub(r'[^a-z\s]', ' ', text)
-    # Menghapus kata 'user'
-    text = text.replace('user', '')
-    # Menghapus spasi berlebih
-    text = re.sub(' +', ' ', text)
-    # Menghapus karakter \n (newline)
-    text = text.replace('\n', ' ')
-    # menghapus kata 'url' 
-    text = re.sub('url',' ', text)
-    return text
+    json_response = {
+        'status_code' : 200,
+        'description' : 'Hasil Prediksi LSTM Sentimen',
+        'data' : {
+            'tulisan' : text_input,
+            'sentimen' : sentiment_result
+        }
 
-def normalize_text_model(text):
-    data_alay = pd.read_sql_query('select * from kamusalay', connection_data)
-    dict_alay = dict(zip(data_alay['alay'], data_alay['normal'])) #Membungkus data teks_alay dan teks baku menjadi dictionary
-    text_list = text.split()
-    
-    text_normal_list = [dict_alay.get(word, word) for word in text_list] #Mengambil nilai baku pada data teks_baku
-    
-    text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
-    return text_normal.strip()
+    }
+    response_data = jsonify(json_response)
+    return response_data
 
-#==========================
+#LSTM File Endpoint
+@swag_from('docs/LSTM_file.yml',methods=['POST'])
+@app.route('/LSTM_file',methods=['POST'])
+def file_lstm():
+    file = request.files["Upload File"]
+    df = pd.read_csv(file, encoding="latin-1")
+    df = df.rename(columns={df.columns[0] :'text'})
+    df['data_bersih'] = df.apply(lambda rows : cleansing_model(rows['text']), axis =1)
 
-#Function of Sensoring and Cleansing data without Modelling
-def sensoring_text(str):
-    df_abusive = pd.read_sql_query("select * from ABUSIVE", connection_data)
-    dict_abusive = dict(zip(df_abusive['teks'], df_abusive['teks']))
-    for x in dict_abusive:
-        str = str.replace(x, '*' * len(x))  
-    return str
-def preprocessing_text(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z]', ' ', text)
-    text = text.replace('user', '')
-    words = [word for word in text.split() if len(word) > 2]
-    return ' '.join(words)
+    result = []
 
-def normalize_text(text):
-    data_alay = pd.read_sql_query('select * from ALAY', connection_data)
-    dict_alay = dict(zip(data_alay['teks_alay'], data_alay['teks_baku'])) #Membungkus data teks_alay dan teks baku menjadi dictionary
-    text_list = text.split()
-    
-    text_normal_list = [dict_alay.get(word, word) for word in text_list] #Mengambil nilai baku pada data teks_baku
-    
-    text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
-    return text_normal.strip()
+    for index, row in df.iterrows():
+        text = tokenizer.text_to_sequences([(row['data_bersih'])])
+        feature_pad_sequences = pad_sequences(text, maxlen=lstm_file.shape[1])
+        predict = lstm_model.predict(feature_pad_sequences)
+        polarity = np.argmax(predict[0])
+        sentiment_result = sentiment[polarity]
 
-def normalization_abusive(teks):
-    df_abusive = pd.read_sql_query("select * from ABUSIVE", connection_data)
-    dict_abusive = dict(zip(df_abusive['teks'],df_abusive['teks']))
-    teks = teks.split()
-    teks_normal = ''
-    for str in teks:
-        if(bool(str in dict_abusive)):
-            str = sensoring_text(str)
-            teks_normal = teks_normal + ' ' + str
-        else:
-            teks_normal = teks_normal + ' ' + str  
-    teks_normal = teks_normal.strip()
-    return teks_normal
+        original_text_upload = df.data_bersih.to_list()
 
-def cleansing_sensoring (text):
-    text = preprocessing_text(text)
-    text = normalize_text (text)
-    text = normalization_abusive(text)
-    
-    return text
-
-def cleansing_model(text):
-    text = preprocess_text_model(text)
-    text = normalize_text_model(text)
-
-    return text
+        json_response = {
+            'status_code' : 200,
+            'description' : 'Hasil Prediksi LSTM Sentimen',
+            'data' : {
+                'tulisan' : original_text_upload,
+                'sentimen' : sentiment_result
+            }
+        }
+        response_data = jsonify(json_response)
+        return response_data
 
 
 
