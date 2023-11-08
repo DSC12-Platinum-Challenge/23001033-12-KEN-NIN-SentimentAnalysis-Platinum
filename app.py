@@ -124,24 +124,26 @@ def cleansing_sensoring (text):
     return text
 
 def cleansing_model(text):
-    text = preprocess_text_model(text)
-    text = normalize_text_model(text)
+    string = preprocess_text_model(text)
+    string = normalize_text_model(text)
 
-    return text
+    return string
 
 #Load LSTM_File
-lstm = open ("LSTM_Files/x_pad_sequences.pickle",'rb')
+lstm = open ("LSTM_Files/x_pad_sequences_new.pickle",'rb')
 lstm_file = pickle.load(lstm)
 lstm.close()
 
 #Model file
-lstm_model = load_model('LSTM_Files/main_model.h5')
+lstm_model = load_model("C:\\Users\\kenta\\OneDrive\\Desktop\\Platinum Binar\\LSTM_Files\\main_model.h5")
+
 
 
 
 @app.route('/')
 def welcoming ():
     return 'Welcom to the API for cleansing and detecting sentiment text'
+    
 
 #Endpoint text sensoring
 @swag_from('docs/text_implementing_processing.yml', methods=['POST'])
@@ -206,9 +208,9 @@ def uploading_file():
 @swag_from('docs/LSTM_text.yml',methods=['POST'])
 @app.route('/LSTM_text',methods=['POST'])
 def text_lstm ():
-    text_input = request.form.get('Masukkan teks!')
-    text = [cleansing_sensoring(text_input)]
-    feature = tokenizer.text_to_sequences(text)
+    text_input = request.form.get('text')
+    text = [cleansing_model(text_input)]
+    feature = tokenizer.texts_to_sequences(text)
     feature_pad_sequences = pad_sequences(feature, maxlen=lstm_file.shape[1])
     predict = lstm_model.predict(feature_pad_sequences)
     polarity = np.argmax(predict[0])
@@ -218,7 +220,7 @@ def text_lstm ():
         'status_code' : 200,
         'description' : 'Hasil Prediksi LSTM Sentimen',
         'data' : {
-            'tulisan' : text_input,
+            'text' : text_input,
             'sentimen' : sentiment_result
         }
 
@@ -238,7 +240,7 @@ def file_lstm():
     result = []
 
     for index, row in df.iterrows():
-        text = tokenizer.text_to_sequences([(row['data_bersih'])])
+        text = tokenizer.texts_to_sequences([(row['data_bersih'])])
         feature_pad_sequences = pad_sequences(text, maxlen=lstm_file.shape[1])
         predict = lstm_model.predict(feature_pad_sequences)
         polarity = np.argmax(predict[0])
@@ -261,4 +263,4 @@ def file_lstm():
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
