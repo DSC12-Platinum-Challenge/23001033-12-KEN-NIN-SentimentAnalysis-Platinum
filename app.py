@@ -75,6 +75,12 @@ def normalize_text_model(text):
     
     text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
     return text_normal.strip()
+def stopword_removal(text):
+    t_stopword = pd.read_sql_query('select * from stopword', connection_model)
+    stopword_words = set(t_stopword['STOPWORD'])
+    words = text.split()
+    filtered_words = [word for word in words if word not in stopword_words]
+    return ' '.join(filtered_words)
 
 #==========================
 
@@ -116,6 +122,7 @@ def normalization_abusive(teks):
     teks_normal = teks_normal.strip()
     return teks_normal
 
+
 def cleansing_sensoring (text):
     text = preprocessing_text(text)
     text = normalize_text (text)
@@ -130,19 +137,19 @@ def cleansing_model(text):
     return string
 
 #Load LSTM_File
-lstm = open ("LSTM_Files/x_pad_sequences_new.pickle",'rb')
+lstm = open ("x_pad_sequences.pickle",'rb')
 lstm_file = pickle.load(lstm)
 lstm.close()
 
 #Model file
-lstm_model = load_model("C:\\Users\\kenta\\OneDrive\\Desktop\\Platinum Binar\\LSTM_Files\\main_model.h5")
+lstm_model = load_model("main_model_new1.h5")
 
 
 
 
 @app.route('/')
 def welcoming ():
-    return 'Welcom to the API for cleansing and detecting sentiment text'
+    return 'Welcome to the API for cleansing and detecting sentiment text'
     
 
 #Endpoint text sensoring
@@ -209,21 +216,24 @@ def uploading_file():
 @app.route('/LSTM_text',methods=['POST'])
 def text_lstm ():
     text_input = request.form.get('text')
-    text = [cleansing_model(text_input)]
-    feature = tokenizer.texts_to_sequences(text)
+    cleaned_text = [cleansing_model(text_input)]
+
+    
+    feature = tokenizer.texts_to_sequences(cleaned_text)
     feature_pad_sequences = pad_sequences(feature, maxlen=lstm_file.shape[1])
+
+    
     predict = lstm_model.predict(feature_pad_sequences)
     polarity = np.argmax(predict[0])
     sentiment_result = sentiment[polarity]
 
     json_response = {
-        'status_code' : 200,
-        'description' : 'Hasil Prediksi LSTM Sentimen',
-        'data' : {
-            'text' : text_input,
-            'sentimen' : sentiment_result
+        'status_code': 200,
+        'description': 'Hasil Prediksi LSTM Sentimen',
+        'data': {
+            'text': text_input,
+            'sentimen': sentiment_result
         }
-
     }
     response_data = jsonify(json_response)
     return response_data
