@@ -91,6 +91,7 @@ def sensoring_text(str):
     for x in dict_abusive:
         str = str.replace(x, '*' * len(x))  
     return str
+
 def preprocessing_text(text):
     text = text.lower()
     text = re.sub(r'[^a-z]', ' ', text)
@@ -145,6 +146,9 @@ lstm.close()
 lstm_model = load_model("main_model_new1.h5")
 
 
+#Load Model NN
+count_vect = pickle.load(open('NN_Files/feature_TFIDF.pickle', 'rb'))
+model_NN = pickle.load(open('NN_Files/model_NN_TFIDF_Dataset.pickle', 'rb'))
 
 
 @app.route('/')
@@ -269,6 +273,59 @@ def file_lstm():
         }
         response_data = jsonify(json_response)
         return response_data
+    
+#NN Teks Endpoint
+@swag_from('docs/NN_text.yml',methods=['POST'])
+@app.route('/NN_text',methods=['POST'])
+def text_NN ():
+    text_input = request.form.get('text')
+    cleaned_text = [cleansing_model(text_input)]
+
+    text_feture_extration = count_vect.transform(cleaned_text)
+    predict = model_NN.predict(text_feture_extration)
+    polarity = np.argmax(predict[0])
+    sentiment_result = sentiment[polarity]
+
+    json_response = {
+        'status_code': 200,
+        'description': 'Hasil Prediksi NN Sentimen',
+        'data': {
+            'text': text_input,
+            'sentimen': sentiment_result
+        }
+    }
+    response_data = jsonify(json_response)
+    return response_data
+
+#NN File Endpoint
+@swag_from('docs/NN_file.yml',methods=['POST'])
+@app.route('/NN_file',methods=['POST'])
+def file_NN():
+    file = request.files["Upload File"]
+    df = pd.read_csv(file, encoding="latin-1")
+    df = df.rename(columns={df.columns[0] :'text'})
+    df['data_bersih'] = df.apply(lambda rows : cleansing_model(rows['text']), axis =1)
+
+    result = []
+
+    for index, row in df.iterrows():
+        text_feture_extration = count_vect.transform([(row['data_bersih'])])
+        predict = model_NN.predict(text_feture_extration)
+        polarity = np.argmax(predict[0])
+        sentiment_result = sentiment[polarity]
+        result.append(sentiment_result)
+    original_text_upload = df.data_bersih.to_list()
+
+    json_response = {
+        'status_code' : 200,
+        'description' : 'Hasil Prediksi NN Sentimen',
+        'data' : {
+            'tulisan' : original_text_upload,
+            'sentimen' : result
+        }
+    }
+    response_data = jsonify(json_response)
+    return response_data
 
 
 
