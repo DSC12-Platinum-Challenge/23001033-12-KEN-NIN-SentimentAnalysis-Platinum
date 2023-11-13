@@ -49,32 +49,38 @@ sentiment = ['negative', 'neutral', 'positive']
 
 #Function Cleansing of Model 
 def preprocess_text_model(text):
-    # Mengubah teks menjadi huruf kecil
-    text = text.lower()
-    # Menghapus URL dan tautan
-    text = re.sub(r'((www\.[^\s]+)|(https?://[^\s]+)|(http?://[^\s]+))', ' ', text)
-    text = re.sub(r'pic.twitter.com.[\w]+', ' ', text)
-    # Menghapus karakter yang tidak diinginkan, termasuk angka
-    text = re.sub(r'[^a-z\s]', ' ', text)
-    # Menghapus kata 'user'
-    text = text.replace('user', '')
-    # Menghapus spasi berlebih
-    text = re.sub(' +', ' ', text)
-    # Menghapus karakter \n (newline)
-    text = text.replace('\n', ' ')
-    # menghapus kata 'url' 
-    text = re.sub('url',' ', text)
-    return text
+    if isinstance(text, str): 
+        # Mengubah teks menjadi huruf kecil
+        text = text.lower()
+        # Menghapus URL dan tautan
+        text = re.sub(r'((www\.[^\s]+)|(https?://[^\s]+)|(http?://[^\s]+))', ' ', text)
+        text = re.sub(r'pic.twitter.com.[\w]+', ' ', text)
+        # Menghapus karakter yang tidak diinginkan, termasuk angka
+        text = re.sub(r'[^a-z\s]', ' ', text)
+        # Menghapus kata 'user'
+        text = text.replace('user', '')
+        # Menghapus spasi berlebih
+        text = re.sub(' +', ' ', text)
+        # Menghapus karakter \n (newline)
+        text = text.replace('\n', ' ')
+        # menghapus kata 'url' 
+        text = re.sub('url',' ', text)
+        return text
+    else:
+        return ""
 
 def normalize_text_model(text):
-    data_alay = pd.read_sql_query('select * from kamusalay', connection_model)
-    dict_alay = dict(zip(data_alay['alay'], data_alay['normal'])) #Membungkus data teks_alay dan teks baku menjadi dictionary
-    text_list = text.split()
-    
-    text_normal_list = [dict_alay.get(word, word) for word in text_list] #Mengambil nilai baku pada data teks_baku
-    
-    text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
-    return text_normal.strip()
+    if isinstance (text, str):
+        data_alay = pd.read_sql_query('select * from kamusalay', connection_model)
+        dict_alay = dict(zip(data_alay['alay'], data_alay['normal'])) #Membungkus data teks_alay dan teks baku menjadi dictionary
+        text_list = text.split()
+        
+        text_normal_list = [dict_alay.get(word, word) for word in text_list] #Mengambil nilai baku pada data teks_baku
+        
+        text_normal = ' '.join(text_normal_list) #mengganti teks yang tidak baku menjadi baku
+        return text_normal.strip()
+    else:
+        return ""
 def stopword_removal(text):
     t_stopword = pd.read_sql_query('select * from stopword', connection_model)
     stopword_words = set(t_stopword['STOPWORD'])
@@ -133,17 +139,17 @@ def cleansing_sensoring (text):
 
 def cleansing_model(text):
     string = preprocess_text_model(text)
-    string = normalize_text_model(text)
+    string = normalize_text_model(string)
 
     return string
 
 # #Load LSTM_File
-# lstm = open ("x_pad_sequences.pickle",'rb')
-# lstm_file = pickle.load(lstm)
-# lstm.close()
+lstm = open ("x_pad_sequences.pickle",'rb')
+lstm_file = pickle.load(lstm)
+lstm.close()
 
 # #Model file
-# lstm_model = load_model("main_model_new1.h5")
+lstm_model = load_model("main_model_new1.h5")
 
 
 #Load Model NN
@@ -216,63 +222,63 @@ def uploading_file():
     return response
 
 # #LSTM Teks Endpoint
-# @swag_from('docs/LSTM_text.yml',methods=['POST'])
-# @app.route('/LSTM_text',methods=['POST'])
-# def text_lstm ():
-#     text_input = request.form.get('text')
-#     cleaned_text = [cleansing_model(text_input)]
+@swag_from('docs/LSTM_text.yml',methods=['POST'])
+@app.route('/LSTM_text',methods=['POST'])
+def text_lstm ():
+    text_input = request.form.get('text')
+    cleaned_text = [cleansing_model(text_input)]
 
     
-#     feature = tokenizer.texts_to_sequences(cleaned_text)
-#     feature_pad_sequences = pad_sequences(feature, maxlen=lstm_file.shape[1])
+    feature = tokenizer.texts_to_sequences(cleaned_text)
+    feature_pad_sequences = pad_sequences(feature, maxlen=lstm_file.shape[1])
 
     
-#     predict = lstm_model.predict(feature_pad_sequences)
-#     polarity = np.argmax(predict[0])
-#     sentiment_result = sentiment[polarity]
+    predict = lstm_model.predict(feature_pad_sequences)
+    polarity = np.argmax(predict[0])
+    sentiment_result = sentiment[polarity]
 
-#     json_response = {
-#         'status_code': 200,
-#         'description': 'Hasil Prediksi LSTM Sentimen',
-#         'data': {
-#             'text': text_input,
-#             'sentimen': sentiment_result
-#         }
-#     }
-#     response_data = jsonify(json_response)
-#     return response_data
+    json_response = {
+        'status_code': 200,
+        'description': 'Hasil Prediksi LSTM Sentimen',
+        'data': {
+            'text': text_input,
+            'sentimen': sentiment_result
+        }
+    }
+    response_data = jsonify(json_response)
+    return response_data
 
 # #LSTM File Endpoint
-# @swag_from('docs/LSTM_file.yml',methods=['POST'])
-# @app.route('/LSTM_file',methods=['POST'])
-# def file_lstm():
-#     file = request.files["Upload File"]
-#     df = pd.read_csv(file, encoding="latin-1")
-#     df = df.rename(columns={df.columns[0] :'text'})
-#     df['data_bersih'] = df.apply(lambda rows : cleansing_model(rows['text']), axis =1)
+@swag_from('docs/LSTM_file.yml',methods=['POST'])
+@app.route('/LSTM_file',methods=['POST'])
+def file_lstm():
+    file = request.files["Upload File"]
+    df = pd.read_csv(file, encoding="latin-1")
+    df = df.rename(columns={df.columns[0] :'text'})
+    df['data_bersih'] = df.apply(lambda rows : cleansing_model(rows['text']), axis =1)
 
-#     result = []
+    result = []
 
-#     for index, row in df.iterrows():
-#         text = tokenizer.texts_to_sequences([(row['data_bersih'])])
-#         feature_pad_sequences = pad_sequences(text, maxlen=lstm_file.shape[1])
-#         predict = lstm_model.predict(feature_pad_sequences)
-#         polarity = np.argmax(predict[0])
-#         sentiment_result = sentiment[polarity]
-#         result.append(sentiment_result)
+    for index, row in df.iterrows():
+        text = tokenizer.texts_to_sequences([(row['data_bersih'])])
+        feature_pad_sequences = pad_sequences(text, maxlen=lstm_file.shape[1])
+        predict = lstm_model.predict(feature_pad_sequences)
+        polarity = np.argmax(predict[0])
+        sentiment_result = sentiment[polarity]
+        result.append(sentiment_result)
 
-#         original_text_upload = df.data_bersih.to_list()
+        original_text_upload = df.data_bersih.to_list()
 
-#         json_response = {
-#             'status_code' : 200,
-#             'description' : 'Hasil Prediksi LSTM Sentimen',
-#             'data' : {
-#                 'tulisan' : original_text_upload,
-#                 'sentimen' : result
-#             }
-#         }
-#         response_data = jsonify(json_response)
-#         return response_data
+        json_response = {
+            'status_code' : 200,
+            'description' : 'Hasil Prediksi LSTM Sentimen',
+            'data' : {
+                'tulisan' : original_text_upload,
+                'sentimen' : result
+            }
+        }
+        response_data = jsonify(json_response)
+        return response_data
     
 #NN Teks Endpoint
 @swag_from('docs/NN_text.yml',methods=['POST'])
